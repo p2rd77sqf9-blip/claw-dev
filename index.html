@@ -609,7 +609,7 @@
                 or upload audio file
                 <input type="file" id="file-input" accept="audio/*" style="display:none">
             </label>
-            <div class="start-hint">1-6 = modes &nbsp;·&nbsp; Q-T = themes &nbsp;·&nbsp; +/− = sensitivity &nbsp;·&nbsp; F = fullscreen</div>
+            <div class="start-hint">1-7 = modes &nbsp;·&nbsp; Q-T = themes &nbsp;·&nbsp; +/− = sensitivity &nbsp;·&nbsp; F = fullscreen</div>
         </div>
     </div>
 
@@ -630,6 +630,7 @@
                 <button class="btn" data-mode="nebula">4 · Nebula</button>
                 <button class="btn" data-mode="fractal">5 · Fractal</button>
                 <button class="btn" data-mode="tunnel">6 · Tunnel</button>
+                <button class="btn" data-mode="sphere">7 · Sphere</button>
             </div>
             <div class="sep"></div>
             <button class="icon-btn" id="fs-btn" title="Fullscreen (F)">&#x26F6;</button>
@@ -1167,6 +1168,180 @@
     }
 
     // ═══════════════════════════════════════════
+    //  Draw — Liquid Glass Sphere
+    // ═══════════════════════════════════════════
+    function drawSphere(data, beat) {
+        const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2;
+
+        // Frequency band energy from pre-scaled data (already sensitivity-adjusted)
+        function band(lo, hi) {
+            let s = 0;
+            for (let i = lo; i < hi; i++) s += data[i];
+            return Math.min(1, s / ((hi - lo) * 255));
+        }
+
+        const bass = band(0, 8);
+        const mid  = band(8, 40);
+        const high = band(40, 100);
+
+        // Sphere radius — pulses gently on beat
+        const r = Math.min(W, H) * 0.3 * (1 + beat.flash * 0.03);
+
+        // Helper: inject alpha into an rgb() string from colorAt()
+        const ca = (col, a) => col.replace('rgb(', 'rgba(').replace(')', `,${+a.toFixed(3)})`);
+
+        // ── 1. Outer reactive halo ──────────────
+        const haloR = r * (1.1 + bass * 0.16 + beat.flash * 0.08);
+        const haloG = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, haloR);
+        haloG.addColorStop(0,   ca(colorAt(0),   0.28 + bass * 0.3));
+        haloG.addColorStop(0.4, ca(colorAt(0.5), 0.1  + mid  * 0.1));
+        haloG.addColorStop(1,   'transparent');
+        ctx.fillStyle = haloG;
+        ctx.beginPath();
+        ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ── 2. Dark glass interior ──────────────
+        const bgG = ctx.createRadialGradient(cx + r * 0.1, cy - r * 0.12, 0, cx, cy, r);
+        bgG.addColorStop(0,    'rgba(14,14,38,0.93)');
+        bgG.addColorStop(0.62, 'rgba(7,7,20,0.97)');
+        bgG.addColorStop(1,    'rgba(2,2,10,1)');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = bgG;
+        ctx.fill();
+
+        // ── 3. Inner content (sphere clip) ──────
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r - 1, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Color orbs — 6 blobs, each tied to a frequency band, additively blended
+        ctx.globalCompositeOperation = 'screen';
+        for (let i = 0; i < 6; i++) {
+            const e   = band(Math.floor(i / 6 * 80), Math.floor((i + 1) / 6 * 80));
+            const ang = (i / 6) * Math.PI * 2 + frame * 0.004 * (i % 2 ? -1.4 : 1);
+            const bx  = cx + Math.cos(ang) * r * (0.15 + e * 0.35);
+            const by  = cy + Math.sin(ang) * r * (0.15 + e * 0.35) * 0.86;
+            const br  = r  * (0.22 + e * 0.32);
+            const col = colorAt((i / 6 + frame * 0.0008) % 1);
+
+            const og = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+            og.addColorStop(0,   ca(col, 0.62 + e * 0.38));
+            og.addColorStop(0.5, ca(col, 0.16 + e * 0.18));
+            og.addColorStop(1,   'transparent');
+            ctx.fillStyle = og;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Radial frequency cage — 64 spokes from center outward
+        ctx.shadowColor = theme.c1;
+        ctx.shadowBlur  = 5;
+        for (let i = 0; i < 64; i++) {
+            const ang  = (i / 64) * Math.PI * 2;
+            const e    = data[Math.min(Math.floor((i / 64) * 80), data.length - 1)] / 255;
+            const sr   = r * 0.1 + e * r * 0.72;
+            const col  = colorAt(i / 64);
+            ctx.strokeStyle = col;
+            ctx.shadowColor = col;
+            ctx.lineWidth   = 1.0;
+            ctx.globalAlpha = 0.4 + e * 0.6;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(ang) * r * 0.1, cy + Math.sin(ang) * r * 0.1);
+            ctx.lineTo(cx + Math.cos(ang) * sr,       cy + Math.sin(ang) * sr);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur  = 0;
+
+        // Beat central flash — radial burst from center
+        if (beat.flash > 0.04) {
+            const fg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+            fg.addColorStop(0,   ca(colorAt(0),   beat.flash * 0.7));
+            fg.addColorStop(0.4, ca(colorAt(0.5), beat.flash * 0.2));
+            fg.addColorStop(1,   'transparent');
+            ctx.fillStyle = fg;
+            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        }
+
+        ctx.restore(); // end sphere clip
+
+        // ── 4. Glass surface curvature overlay ──
+        const sfG = ctx.createRadialGradient(cx - r * 0.15, cy - r * 0.15, 0, cx, cy, r);
+        sfG.addColorStop(0,    'rgba(255,255,255,0)');
+        sfG.addColorStop(0.54, 'rgba(255,255,255,0.012)');
+        sfG.addColorStop(0.82, 'rgba(255,255,255,0.036)');
+        sfG.addColorStop(0.93, 'rgba(255,255,255,0.1)');
+        sfG.addColorStop(1,    'rgba(255,255,255,0.22)');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = sfG;
+        ctx.fill();
+
+        // ── 5. Primary specular highlight ───────
+        // Upper-left bright catchlight — the defining "glass sphere" element
+        const sp1x = cx - r * 0.33, sp1y = cy - r * 0.37;
+        const sp1G = ctx.createRadialGradient(sp1x, sp1y, 0, sp1x, sp1y, r * 0.44);
+        sp1G.addColorStop(0,    'rgba(255,255,255,0.92)');
+        sp1G.addColorStop(0.18, 'rgba(255,255,255,0.5)');
+        sp1G.addColorStop(0.52, 'rgba(255,255,255,0.08)');
+        sp1G.addColorStop(1,    'rgba(255,255,255,0)');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = sp1G;
+        ctx.fill();
+
+        // ── 6. Secondary specular (lower-right) ─
+        const sp2x = cx + r * 0.44, sp2y = cy + r * 0.38;
+        const sp2G = ctx.createRadialGradient(sp2x, sp2y, 0, sp2x, sp2y, r * 0.21);
+        sp2G.addColorStop(0,   'rgba(255,255,255,0.2)');
+        sp2G.addColorStop(0.5, 'rgba(255,255,255,0.05)');
+        sp2G.addColorStop(1,   'rgba(255,255,255,0)');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = sp2G;
+        ctx.fill();
+
+        // ── 7. Fresnel rim — Liquid Glass edge ──
+        // Darkens toward center of edge, brightens at the very rim (physically accurate)
+        const rimG = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r);
+        rimG.addColorStop(0,    'transparent');
+        rimG.addColorStop(0.58, 'rgba(255,255,255,0.008)');
+        rimG.addColorStop(0.86, ca(colorAt(0),   0.1 + bass * 0.08));
+        rimG.addColorStop(0.95, ca(colorAt(0.5), 0.14 + mid  * 0.06));
+        rimG.addColorStop(1,    'rgba(255,255,255,0.2)');
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = rimG;
+        ctx.fill();
+
+        // ── 8. Frequency-distorted reactive outline
+        // Each point on the sphere border is displaced outward by its frequency bin,
+        // making the surface ripple like liquid glass
+        ctx.beginPath();
+        for (let i = 0; i <= 240; i++) {
+            const ang  = (i / 240) * Math.PI * 2;
+            const e    = data[Math.min(Math.floor((i / 240) * 60), data.length - 1)] / 255;
+            const dist = r * (1.006 + e * 0.058 * (1 + beat.flash * 2.5));
+            i === 0
+                ? ctx.moveTo(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist)
+                : ctx.lineTo(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = ca(colorAt(0), 0.55);
+        ctx.lineWidth   = 1.5;
+        ctx.shadowColor = theme.c1;
+        ctx.shadowBlur  = 16 + beat.flash * 30 + bass * 18;
+        ctx.stroke();
+        ctx.shadowBlur  = 0;
+    }
+
+    // ═══════════════════════════════════════════
     //  Rounded rect helper
     // ═══════════════════════════════════════════
     function rr(c, x, y, w, h, r) {
@@ -1237,6 +1412,7 @@
             case 'nebula':  drawNebula(data, beat);  break;
             case 'fractal': drawFractal(data, beat); break;
             case 'tunnel':  drawTunnel(data, beat);  break;
+            case 'sphere':  drawSphere(data, beat);  break;
         }
 
         // HUD update
@@ -1417,6 +1593,7 @@
         else if (k === '4') setMode('nebula');
         else if (k === '5') setMode('fractal');
         else if (k === '6') setMode('tunnel');
+        else if (k === '7') setMode('sphere');
         else if (k === 'q') setTheme(0);
         else if (k === 'w') setTheme(1);
         else if (k === 'e') setTheme(2);
