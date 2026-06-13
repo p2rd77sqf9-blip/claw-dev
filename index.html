@@ -299,7 +299,7 @@
                     <input type="file" id="file-input" accept="audio/*" style="display:none">
                 </label>
             </div>
-            <div class="start-hint">1-4 = modes &nbsp;·&nbsp; Q-T = themes &nbsp;·&nbsp; +/− = sensitivity &nbsp;·&nbsp; F = fullscreen</div>
+            <div class="start-hint">1-6 = modes &nbsp;·&nbsp; Q-T = themes &nbsp;·&nbsp; +/− = sensitivity &nbsp;·&nbsp; F = fullscreen</div>
         </div>
     </div>
 
@@ -318,6 +318,8 @@
                 <button class="btn" data-mode="wave">2 · Wave</button>
                 <button class="btn" data-mode="radial">3 · Radial</button>
                 <button class="btn" data-mode="nebula">4 · Nebula</button>
+                <button class="btn" data-mode="fractal">5 · Fractal</button>
+                <button class="btn" data-mode="tunnel">6 · Tunnel</button>
             </div>
             <div class="sep"></div>
             <button class="icon-btn" id="fs-btn" title="Fullscreen (F)">&#x26F6;</button>
@@ -366,6 +368,7 @@
     let themeIdx = 0;
     let theme    = THEMES[0];
     let particles = [];
+    let tunnelZ   = Array.from({length: 20}, (_, i) => (i + 0.5) / 20);
     let frame = 0;
 
     // Beat detection state
@@ -395,7 +398,8 @@
     function resize() {
         canvas.width  = window.innerWidth;
         canvas.height = window.innerHeight;
-        if (running && mode === 'nebula') spawnParticles();
+        if (running && mode === 'nebula')  spawnParticles();
+        if (running && mode === 'tunnel')  initTunnel();
     }
     resize();
     window.addEventListener('resize', resize);
@@ -479,6 +483,10 @@
             freq: Math.floor(Math.random() * 85),
             hue:  Math.random(),
         }));
+    }
+
+    function initTunnel() {
+        tunnelZ = Array.from({length: 20}, (_, i) => (i + 0.5) / 20);
     }
 
     // ═══════════════════════════════════════════
@@ -684,6 +692,146 @@
     }
 
     // ═══════════════════════════════════════════
+    //  Draw — Fractal Tree
+    // ═══════════════════════════════════════════
+    function drawFractal(data, beat) {
+        const W = canvas.width, H = canvas.height;
+
+        function band(lo, hi) {
+            let s = 0;
+            for (let i = lo; i < hi; i++) s += data[i];
+            return Math.min(1, (s / ((hi - lo) * 255)) * sensitivity);
+        }
+
+        const bass = band(0, 8);
+        const mid  = band(8, 40);
+        const high = band(40, 100);
+
+        const maxD   = 8 + Math.floor(high * 2);       // 8-10 levels
+        const spread = 0.28 + mid * 0.58;               // branch angle
+        const ratio  = 0.58 + high * 0.14;              // branch length ratio
+        const trunk  = H * 0.26 * (0.82 + bass * 0.35);
+        const sway   = Math.sin(frame * 0.008) * 0.04 * (1 + mid * 0.5);
+
+        // Use a single shadowBlur for performance
+        ctx.shadowColor = theme.c2;
+        ctx.shadowBlur  = 12;
+
+        function br(x1, y1, ang, len, d) {
+            if (d < 0 || len < 1.2) return;
+            const x2 = x1 + Math.cos(ang) * len;
+            const y2 = y1 + Math.sin(ang) * len;
+            const t  = (maxD - d) / maxD;
+
+            ctx.lineWidth   = Math.max(0.4, (d / maxD) * 4.5 * (1 + bass * 0.25));
+            ctx.strokeStyle = colorAt(t);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            br(x2, y2, ang - spread, len * ratio, d - 1);
+            br(x2, y2, ang + spread, len * ratio, d - 1);
+        }
+
+        // Canopy (upward tree)
+        br(W / 2, H + 5, -Math.PI / 2 + sway, trunk, maxD);
+
+        // Roots (mirrored downward, dimmed)
+        ctx.globalAlpha = 0.22;
+        ctx.shadowBlur  = 5;
+        br(W / 2, -5, Math.PI / 2 - sway, trunk * 0.48, maxD - 2);
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur  = 0;
+
+        // Beat root burst
+        if (beat.flash > 0.05) {
+            const g = ctx.createRadialGradient(W / 2, H, 0, W / 2, H, trunk * 2.2);
+            g.addColorStop(0, theme.c1 + Math.floor(beat.flash * 0x44).toString(16).padStart(2, '0'));
+            g.addColorStop(1, 'transparent');
+            ctx.fillStyle   = g;
+            ctx.globalAlpha = beat.flash * 0.38;
+            ctx.fillRect(0, 0, W, H);
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    // ═══════════════════════════════════════════
+    //  Draw — Depth Tunnel
+    // ═══════════════════════════════════════════
+    function drawTunnel(data, beat) {
+        const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2;
+        const SIDES = 6;
+        const speed = 0.0026 + beat.flash * 0.022;
+
+        // Advance each ring toward viewer, wrap when past
+        for (let i = 0; i < tunnelZ.length; i++) {
+            tunnelZ[i] -= speed;
+            if (tunnelZ[i] < 0) tunnelZ[i] = 1;
+        }
+
+        // Painter's order: far (high z) first
+        const sorted = tunnelZ.map((z, i) => ({z, i})).sort((a, b) => b.z - a.z);
+
+        // Vanishing point glow
+        const vg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 70);
+        vg.addColorStop(0, theme.c1 + '20');
+        vg.addColorStop(1, 'transparent');
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, W, H);
+
+        // Perspective lines from center (faint depth cues)
+        ctx.globalAlpha = 0.04;
+        ctx.strokeStyle = theme.c1;
+        ctx.lineWidth   = 0.5;
+        for (let j = 0; j < SIDES; j++) {
+            const ang = (j / SIDES) * Math.PI * 2 + frame * 0.005;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(cx + Math.cos(ang) * Math.max(W, H), cy + Math.sin(ang) * Math.max(W, H) * 0.9);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        for (const {z, i} of sorted) {
+            const near = 1 - z;                         // 0=far, 1=near
+            const sz   = near * Math.min(W, H) * 0.58;
+            if (sz < 2) continue;
+
+            const binIdx = Math.min(Math.floor(z * 80), data.length - 1);
+            const energy = (data[binIdx] / 255) * sensitivity;
+
+            const col = colorAt((i / tunnelZ.length + frame * 0.002) % 1);
+
+            ctx.strokeStyle = col;
+            ctx.lineWidth   = 0.6 + near * 2.8 + energy * 2.2;
+            ctx.shadowColor = col;
+            ctx.shadowBlur  = 4 + near * 16 + energy * 18;
+            ctx.globalAlpha = near * near * (0.36 + energy * 0.64);
+
+            ctx.beginPath();
+            for (let j = 0; j <= SIDES; j++) {
+                const ang  = (j / SIDES) * Math.PI * 2 + frame * 0.005;
+                const warp = 1 + energy * 0.32 * Math.sin(j * 2.5 + frame * 0.06);
+                const r    = sz / 2 * warp;
+                j === 0
+                    ? ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r * 0.9)
+                    : ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r * 0.9);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur  = 0;
+    }
+
+    // ═══════════════════════════════════════════
     //  Rounded rect helper
     // ═══════════════════════════════════════════
     function rr(c, x, y, w, h, r) {
@@ -724,7 +872,7 @@
         const data = new Uint8Array(bufLen);
         for (let i = 0; i < bufLen; i++) data[i] = Math.min(255, raw[i] * sensitivity);
 
-        // Background — nebula uses trail blur, others hard clear
+        // Background — nebula trails; tunnel uses hard clear (rings draw their own depth)
         if (mode === 'nebula') {
             ctx.fillStyle   = theme.bg;
             ctx.globalAlpha = 0.14;
@@ -748,10 +896,12 @@
 
         // Draw active mode
         switch (mode) {
-            case 'bars':   drawBars(data, beat);   break;
-            case 'wave':   drawWave(data, beat);   break;
-            case 'radial': drawRadial(data, beat); break;
-            case 'nebula': drawNebula(data, beat); break;
+            case 'bars':    drawBars(data, beat);    break;
+            case 'wave':    drawWave(data, beat);    break;
+            case 'radial':  drawRadial(data, beat);  break;
+            case 'nebula':  drawNebula(data, beat);  break;
+            case 'fractal': drawFractal(data, beat); break;
+            case 'tunnel':  drawTunnel(data, beat);  break;
         }
 
         // HUD update
@@ -831,7 +981,8 @@
     // ═══════════════════════════════════════════
     function setMode(m) {
         mode = m;
-        if (mode === 'nebula') spawnParticles();
+        if (mode === 'nebula')  spawnParticles();
+        if (mode === 'tunnel')  initTunnel();
         document.querySelectorAll('[data-mode]').forEach(b => {
             b.classList.toggle('on', b.dataset.mode === m);
         });
@@ -906,6 +1057,8 @@
         else if (k === '2') setMode('wave');
         else if (k === '3') setMode('radial');
         else if (k === '4') setMode('nebula');
+        else if (k === '5') setMode('fractal');
+        else if (k === '6') setMode('tunnel');
         else if (k === 'q') setTheme(0);
         else if (k === 'w') setTheme(1);
         else if (k === 'e') setTheme(2);
