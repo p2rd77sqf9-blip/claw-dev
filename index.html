@@ -237,6 +237,49 @@
                 inset 0 -1px 0 rgba(0, 0, 0, 0.1);
         }
 
+        /* Secondary Liquid Glass button — no color tint */
+        .btn-glass {
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(12px) saturate(140%);
+            -webkit-backdrop-filter: blur(12px) saturate(140%);
+            background: rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: rgba(255, 255, 255, 0.72);
+            padding: 13px 34px;
+            border-radius: 100px;
+            font-size: 0.92rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.24s ease;
+            letter-spacing: 0.04em;
+            box-shadow:
+                0 4px 20px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.22),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+        }
+
+        .btn-glass::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.09) 0%, transparent 100%);
+            border-radius: 100px 100px 0 0;
+            pointer-events: none;
+        }
+
+        .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.28),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+        }
+
         .btn-file {
             position: relative;
             z-index: 1;
@@ -560,11 +603,12 @@
             <div class="start-sub">Real-time audio frequency analysis</div>
             <div class="start-actions">
                 <button class="btn-primary" id="mic-btn">Use Microphone</button>
-                <label class="btn-file">
-                    or upload audio file
-                    <input type="file" id="file-input" accept="audio/*" style="display:none">
-                </label>
+                <button class="btn-glass"   id="sys-btn">Computer Audio</button>
             </div>
+            <label class="btn-file" style="position:relative;z-index:1;margin-top:14px;">
+                or upload audio file
+                <input type="file" id="file-input" accept="audio/*" style="display:none">
+            </label>
             <div class="start-hint">1-6 = modes &nbsp;·&nbsp; Q-T = themes &nbsp;·&nbsp; +/− = sensitivity &nbsp;·&nbsp; F = fullscreen</div>
         </div>
     </div>
@@ -698,6 +742,31 @@
         src.connect(analyser);
         analyser.connect(audioCtx.destination);
         src.start();
+        go();
+    }
+
+    // ═══════════════════════════════════════════
+    //  Audio — computer / system audio
+    // ═══════════════════════════════════════════
+    async function initSystemAudio() {
+        audioCtx = new AudioContext();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.82;
+
+        // getDisplayMedia requires video on most browsers; we drop it immediately
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { width: 1, height: 1, frameRate: 1 },
+            audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 44100 },
+        });
+
+        stream.getVideoTracks().forEach(t => t.stop());
+
+        if (!stream.getAudioTracks().length) {
+            throw new Error('no-audio');
+        }
+
+        audioCtx.createMediaStreamSource(stream).connect(analyser);
         go();
     }
 
@@ -1302,6 +1371,29 @@
                 'Make sure this page is served from localhost (run: npm run viz)\n' +
                 'and that browser microphone permission is granted.'
             );
+        }
+    });
+
+    document.getElementById('sys-btn').addEventListener('click', async () => {
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+            alert('Screen audio capture is not supported in this browser.\nTry Chrome or Edge on desktop.');
+            return;
+        }
+        try {
+            await initSystemAudio();
+        } catch (e) {
+            if (e.name === 'NotAllowedError' || e.name === 'AbortError') return; // user cancelled
+            if (e.message === 'no-audio') {
+                alert(
+                    'No audio was captured.\n\n' +
+                    'In the sharing dialog:\n' +
+                    '  • Browser tab → check "Share tab audio"\n' +
+                    '  • Entire screen → enable "Share system audio"\n' +
+                    '    (system audio works on Windows and ChromeOS)'
+                );
+            } else {
+                alert('Could not capture audio: ' + (e.message ?? 'Unknown error'));
+            }
         }
     });
 
