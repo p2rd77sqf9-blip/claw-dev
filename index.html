@@ -11,6 +11,13 @@
             --c1: #00ffff;
             --c2: #ff00ff;
             --c1-rgb: 0,255,255;
+            /* Liquid Glass tokens */
+            --glass-bg:      rgba(255, 255, 255, 0.055);
+            --glass-border:  rgba(255, 255, 255, 0.14);
+            --glass-shine:   rgba(255, 255, 255, 0.18);
+            --glass-shadow:  rgba(0, 0, 0, 0.45);
+            --glass-blur:    blur(28px) saturate(160%);
+            --glass-radius:  20px;
         }
 
         body {
@@ -28,6 +35,53 @@
             display: block;
             width: 100%;
             height: 100%;
+        }
+
+        /* ── Liquid Glass base ── */
+        .glass {
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow:
+                0 12px 48px var(--glass-shadow),
+                inset 0 1px 0 var(--glass-shine),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Top specular edge highlight */
+        .glass::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 12px;
+            right: 12px;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255,255,255,0.4) 30%,
+                rgba(255,255,255,0.55) 50%,
+                rgba(255,255,255,0.4) 70%,
+                transparent 100%);
+            border-radius: 100px;
+            pointer-events: none;
+        }
+
+        /* Inner top sheen (refraction gradient) */
+        .glass::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 45%;
+            background: linear-gradient(180deg,
+                rgba(255,255,255,0.06) 0%,
+                transparent 100%);
+            border-radius: inherit;
+            pointer-events: none;
         }
 
         /* ── Start Screen ── */
@@ -53,11 +107,57 @@
             position: relative;
             z-index: 1;
             text-align: center;
-            padding: 0 24px;
+            padding: 52px 64px 44px;
+            border-radius: 32px;
+            /* Liquid Glass — slightly darker tint so content reads clearly */
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            background: linear-gradient(
+                160deg,
+                rgba(var(--c1-rgb), 0.06) 0%,
+                rgba(255, 255, 255, 0.04) 40%,
+                rgba(255, 255, 255, 0.03) 100%
+            );
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            box-shadow:
+                0 24px 80px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+            overflow: hidden;
+        }
+
+        /* Specular edge on the start card */
+        .start-inner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 16px;
+            right: 16px;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent,
+                rgba(255,255,255,0.5) 35%,
+                rgba(255,255,255,0.65) 50%,
+                rgba(255,255,255,0.5) 65%,
+                transparent);
+            pointer-events: none;
+        }
+
+        /* Top inner sheen */
+        .start-inner::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 42%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.055) 0%, transparent 100%);
+            border-radius: 32px 32px 0 0;
+            pointer-events: none;
         }
 
         .start-title {
-            font-size: clamp(2.8rem, 7vw, 5.5rem);
+            position: relative;
+            z-index: 1;
+            font-size: clamp(2.8rem, 7vw, 5rem);
             font-weight: 800;
             letter-spacing: -0.03em;
             background: linear-gradient(135deg, #00ffff 0%, #ff00ff 100%);
@@ -69,67 +169,126 @@
         }
 
         .start-sub {
-            color: rgba(255,255,255,0.36);
-            font-size: 1rem;
-            margin-bottom: 48px;
+            position: relative;
+            z-index: 1;
+            color: rgba(255,255,255,0.42);
+            font-size: 0.95rem;
+            margin-bottom: 44px;
             letter-spacing: 0.02em;
         }
 
         .start-actions {
+            position: relative;
+            z-index: 1;
             display: flex;
-            gap: 14px;
+            gap: 12px;
             justify-content: center;
             align-items: center;
             flex-wrap: wrap;
         }
 
+        /* Liquid Glass primary button */
         .btn-primary {
-            background: linear-gradient(135deg, rgba(0,255,255,0.13), rgba(255,0,255,0.13));
-            border: 1px solid rgba(0,255,255,0.45);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(12px) saturate(160%);
+            -webkit-backdrop-filter: blur(12px) saturate(160%);
+            background: linear-gradient(
+                135deg,
+                rgba(var(--c1-rgb), 0.18) 0%,
+                rgba(255, 255, 255, 0.06) 100%
+            );
+            border: 1px solid rgba(var(--c1-rgb), 0.38);
             color: #fff;
-            padding: 13px 36px;
+            padding: 13px 34px;
             border-radius: 100px;
-            font-size: 0.93rem;
+            font-size: 0.92rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.25s ease;
+            transition: all 0.24s ease;
             letter-spacing: 0.04em;
+            box-shadow:
+                0 4px 24px rgba(var(--c1-rgb), 0.14),
+                inset 0 1px 0 rgba(255, 255, 255, 0.22),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, transparent 100%);
+            border-radius: 100px 100px 0 0;
+            pointer-events: none;
         }
 
         .btn-primary:hover {
-            background: linear-gradient(135deg, rgba(0,255,255,0.26), rgba(255,0,255,0.26));
-            border-color: rgba(0,255,255,0.9);
+            background: linear-gradient(
+                135deg,
+                rgba(var(--c1-rgb), 0.28) 0%,
+                rgba(255, 255, 255, 0.1) 100%
+            );
+            border-color: rgba(var(--c1-rgb), 0.7);
             transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(0,255,255,0.18);
+            box-shadow:
+                0 10px 36px rgba(var(--c1-rgb), 0.24),
+                inset 0 1px 0 rgba(255, 255, 255, 0.28),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
         }
 
         .btn-file {
-            color: rgba(255,255,255,0.38);
-            font-size: 0.84rem;
+            position: relative;
+            z-index: 1;
+            color: rgba(255,255,255,0.36);
+            font-size: 0.83rem;
             cursor: pointer;
             text-decoration: underline;
             text-underline-offset: 3px;
             transition: color 0.2s;
         }
 
-        .btn-file:hover { color: rgba(255,255,255,0.7); }
+        .btn-file:hover { color: rgba(255,255,255,0.65); }
 
         .start-hint {
-            margin-top: 40px;
-            color: rgba(255,255,255,0.18);
-            font-size: 0.74rem;
+            position: relative;
+            z-index: 1;
+            margin-top: 36px;
+            color: rgba(255,255,255,0.16);
+            font-size: 0.72rem;
             letter-spacing: 0.07em;
             text-transform: uppercase;
         }
 
-        /* ── HUD ── */
+        /* ── HUD — Liquid Glass pill badge ── */
         #hud {
             position: fixed;
-            top: 20px;
-            left: 24px;
+            top: 18px;
+            left: 20px;
             z-index: 50;
+            padding: 10px 16px;
+            border-radius: 16px;
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow:
+                0 6px 28px rgba(0, 0, 0, 0.38),
+                inset 0 1px 0 var(--glass-shine),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.12);
             opacity: 0;
             transition: opacity 0.4s;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        /* HUD top specular */
+        #hud::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 8px; right: 8px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
             pointer-events: none;
         }
 
@@ -137,7 +296,7 @@
         body.idle #hud { opacity: 0; }
 
         .hud-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             letter-spacing: -0.01em;
             background: linear-gradient(135deg, var(--c1), var(--c2));
@@ -148,34 +307,77 @@
 
         .hud-stats {
             font-size: 10px;
-            color: rgba(255,255,255,0.26);
+            color: rgba(255,255,255,0.3);
             margin-top: 3px;
             letter-spacing: 0.04em;
         }
 
-        /* ── Controls ── */
+        /* ── Controls — floating Liquid Glass card ── */
         #controls {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 50;
-            padding: 28px 28px 20px;
+            padding: 14px 20px;
             display: none;
             flex-direction: column;
-            gap: 9px;
-            background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%);
+            gap: 10px;
+            width: max-content;
+            max-width: calc(100vw - 32px);
+            border-radius: var(--glass-radius);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow:
+                0 16px 56px var(--glass-shadow),
+                inset 0 1px 0 var(--glass-shine),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.14);
             opacity: 0;
-            transition: opacity 0.4s;
+            transition: opacity 0.4s, transform 0.4s;
+            overflow: hidden;
+        }
+
+        /* Controls top specular line */
+        #controls::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 16px; right: 16px;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255,255,255,0.38) 25%,
+                rgba(255,255,255,0.55) 50%,
+                rgba(255,255,255,0.38) 75%,
+                transparent 100%);
+            pointer-events: none;
+        }
+
+        /* Controls top inner sheen */
+        #controls::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 40%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.045) 0%, transparent 100%);
+            border-radius: var(--glass-radius) var(--glass-radius) 0 0;
+            pointer-events: none;
         }
 
         #controls.show { display: flex; opacity: 1; }
-        body.idle #controls { opacity: 0; pointer-events: none; }
+        body.idle #controls {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(-50%) translateY(6px);
+        }
 
         .ctrl-row {
+            position: relative;
+            z-index: 1;
             display: flex;
             align-items: center;
-            gap: 9px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
@@ -183,103 +385,167 @@
             font-size: 10px;
             font-weight: 700;
             letter-spacing: 0.12em;
-            color: rgba(255,255,255,0.28);
+            color: rgba(255,255,255,0.3);
             text-transform: uppercase;
-            width: 70px;
+            width: 56px;
             flex-shrink: 0;
         }
 
-        .btn-grp { display: flex; gap: 5px; }
+        .btn-grp { display: flex; gap: 4px; flex-wrap: wrap; }
 
+        /* Liquid Glass pill button */
         .btn {
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: rgba(255,255,255,0.52);
-            padding: 6px 14px;
+            position: relative;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            color: rgba(255, 255, 255, 0.5);
+            padding: 5px 13px;
             border-radius: 100px;
             cursor: pointer;
             font-size: 11px;
             font-weight: 500;
-            transition: all 0.18s;
+            transition: all 0.18s ease;
             letter-spacing: 0.03em;
             white-space: nowrap;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
         }
 
-        .btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+        /* Button inner sheen */
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 100%);
+            border-radius: 100px 100px 0 0;
+            pointer-events: none;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.13);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.9);
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,0.18),
+                0 2px 12px rgba(0,0,0,0.2);
+        }
 
         .btn.on {
-            background: rgba(var(--c1-rgb), 0.16);
-            border-color: rgba(var(--c1-rgb), 0.65);
+            background: linear-gradient(
+                145deg,
+                rgba(var(--c1-rgb), 0.22) 0%,
+                rgba(var(--c1-rgb), 0.1) 100%
+            );
+            border-color: rgba(var(--c1-rgb), 0.5);
             color: var(--c1);
+            box-shadow:
+                inset 0 1px 0 rgba(var(--c1-rgb), 0.3),
+                0 0 14px rgba(var(--c1-rgb), 0.15);
+            text-shadow: 0 0 12px rgba(var(--c1-rgb), 0.6);
         }
 
+        /* Theme dot swatches */
         .theme-dot {
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            border: 2px solid transparent;
+            border: 1.5px solid rgba(255,255,255,0.15);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.3);
         }
 
-        .theme-dot:hover { transform: scale(1.15); }
+        .theme-dot:hover {
+            transform: scale(1.18);
+            border-color: rgba(255,255,255,0.4);
+        }
 
         .theme-dot.on {
-            border-color: rgba(255,255,255,0.8);
+            border-color: rgba(255,255,255,0.85);
             transform: scale(1.28);
-            box-shadow: 0 0 10px rgba(255,255,255,0.25);
+            box-shadow:
+                0 0 0 2px rgba(255,255,255,0.12),
+                0 4px 14px rgba(0,0,0,0.35),
+                inset 0 1px 0 rgba(255,255,255,0.35);
         }
 
+        /* Glass range slider */
         input[type=range] {
             -webkit-appearance: none;
             width: 86px;
-            height: 3px;
-            background: rgba(255,255,255,0.12);
-            border-radius: 2px;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 100px;
             outline: none;
             cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
         }
 
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 13px;
-            height: 13px;
-            background: var(--c1);
+            width: 14px;
+            height: 14px;
+            background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.7), var(--c1) 60%);
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: 0 0 6px var(--c1);
+            border: 1px solid rgba(255,255,255,0.3);
+            box-shadow: 0 2px 8px rgba(var(--c1-rgb), 0.4), 0 0 0 1px rgba(var(--c1-rgb), 0.2);
         }
 
+        /* Divider */
         .sep {
             width: 1px;
-            height: 18px;
-            background: rgba(255,255,255,0.09);
-            margin: 0 3px;
+            height: 16px;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,0.12), transparent);
+            margin: 0 2px;
+            flex-shrink: 0;
         }
 
+        /* Icon button — glass square */
         .icon-btn {
-            background: rgba(255,255,255,0.06);
-            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+            overflow: hidden;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.11);
             color: rgba(255,255,255,0.45);
             width: 28px;
             height: 28px;
-            border-radius: 7px;
+            border-radius: 9px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.18s;
+            transition: all 0.18s ease;
             font-size: 13px;
             flex-shrink: 0;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
         }
 
-        .icon-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+        .icon-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%);
+            border-radius: 9px 9px 0 0;
+            pointer-events: none;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255,255,255,0.14);
+            border-color: rgba(255,255,255,0.2);
+            color: #fff;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 10px rgba(0,0,0,0.2);
+        }
 
         .val-badge {
             font-size: 10px;
-            color: rgba(255,255,255,0.28);
+            color: rgba(255,255,255,0.3);
             min-width: 28px;
+            font-variant-numeric: tabular-nums;
         }
     </style>
 </head>
