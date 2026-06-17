@@ -29,13 +29,15 @@
             height: 100vh;
         }
 
-        #canvas {
+        #canvas, #gl-canvas {
             position: fixed;
             inset: 0;
-            display: block;
             width: 100%;
             height: 100%;
         }
+
+        #canvas    { display: block; }
+        #gl-canvas { display: none; }
 
         /* ── Liquid Glass base ── */
         .glass {
@@ -594,6 +596,7 @@
 </head>
 <body>
     <canvas id="canvas"></canvas>
+    <canvas id="gl-canvas"></canvas>
 
     <!-- Start screen -->
     <div id="start">
@@ -710,10 +713,222 @@
         canvas.width  = window.innerWidth;
         canvas.height = window.innerHeight;
         if (running && mode === 'nebula')  spawnParticles();
-        if (running && mode === 'tunnel')  initTunnel();
+        if (running && mode === 'tunnel' && !glReady) initTunnel();
+        resizeGL();
     }
+
+    // ═══════════════════════════════════════════
+    //  WebGL — raymarched fractal renderer
+    //  (Fractal + Tunnel modes; falls back to the
+    //   canvas2d versions below if WebGL is unavailable)
+    // ═══════════════════════════════════════════
+    const glCanvas = document.getElementById('gl-canvas');
+    let gl = null, glProg = null, glU = {}, glReady = false, glStartTs = 0;
+
+    const GL_VERT_SRC = `
+        attribute vec2 aPos;
+        void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }
+    `;
+
+    const GL_FRAG_SRC = `
+        precision highp float;
+        uniform vec2  uRes;
+        uniform float uTime;
+        uniform float uBass, uMid, uHigh, uBeat;
+        uniform vec3  uC1, uC2, uC3, uBg;
+        uniform int   uScene;
+
+        mat2 rot2(float a){ float s = sin(a), c = cos(a); return mat2(c, -s, s, c); }
+
+        vec3 palette(float t){
+            t = fract(t);
+            return t < 0.5 ? mix(uC1, uC2, t * 2.0) : mix(uC2, uC3, (t - 0.5) * 2.0);
+        }
+
+        // Sierpinski-tetrahedron IFS fold — classic, well-behaved distance estimator
+        float deKIFS(vec3 p, float scale, int iters){
+            vec3 a1 = vec3( 1.0,  1.0,  1.0);
+            vec3 a2 = vec3(-1.0, -1.0,  1.0);
+            vec3 a3 = vec3( 1.0, -1.0, -1.0);
+            vec3 a4 = vec3(-1.0,  1.0, -1.0);
+            float n = 0.0;
+            for (int i = 0; i < 9; i++){
+                if (i >= iters) break;
+                vec3 c = a1; float dist = length(p - a1);
+                float d = length(p - a2); if (d < dist) { c = a2; dist = d; }
+                d = length(p - a3); if (d < dist) { c = a3; dist = d; }
+                d = length(p - a4); if (d < dist) { c = a4; dist = d; }
+                p = scale * p - c * (scale - 1.0);
+                n += 1.0;
+            }
+            return length(p) * pow(scale, -n);
+        }
+
+        float map(vec3 p){
+            if (uScene == 1) {
+                // Infinite fractal tunnel: repeat space along z, twist with highs
+                float period = 5.5 - uMid * 1.2;
+                p.xy = rot2(p.z * 0.18 + uHigh * 1.8) * p.xy;
+                p.z  = mod(p.z, period) - period * 0.5;
+                float scale = 2.0 + uHigh * 0.32;
+                return deKIFS(p, scale, 7) * 0.85;
+            } else {
+                // Centered fractal object, slow auto-rotation, bass-driven fold scale
+                p.xz = rot2(uTime * 0.12) * p.xz;
+                p.xy = rot2(uTime * 0.08 + uBass * 0.6) * p.xy;
+                float scale = 1.82 + uMid * 0.5;
+                return deKIFS(p, scale, 8) * 0.85;
+            }
+        }
+
+        void main(){
+            vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+
+            vec3 ro, rd;
+            if (uScene == 1) {
+                float t = uTime * (0.6 + uBass * 0.8 + uBeat * 0.5);
+                ro = vec3(0.0, 0.0, t);
+                rd = normalize(vec3(uv, 0.85));
+            } else {
+                float dist = 4.2 - uBass * 0.8 - uBeat * 0.4;
+                float ang  = uTime * 0.05;
+                ro = vec3(sin(ang) * dist, 0.0, cos(ang) * dist);
+                vec3 fwd   = normalize(-ro);
+                vec3 right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+                vec3 up    = cross(right, fwd);
+                rd = normalize(fwd * 1.4 + right * uv.x + up * uv.y);
+            }
+
+            float dO = 0.0;
+            float glow = 0.0;
+            int steps = 0;
+            const int MAX_STEPS = 70;
+            for (int i = 0; i < MAX_STEPS; i++){
+                vec3 p  = ro + rd * dO;
+                float dS = map(p);
+                glow += exp(-dS * 14.0) * 0.045;
+                dO += max(dS * 0.55, 0.0018);
+                steps = i;
+                if (dS < 0.001 || dO > 22.0) break;
+            }
+
+            vec3 col = uBg * 0.5;
+            if (dO < 22.0) {
+                float tt = float(steps) / float(MAX_STEPS);
+                float trapMix = tt * 1.4 + uTime * 0.04 + (uScene == 1 ? dO * 0.03 : 0.0);
+                col = palette(trapMix);
+                float fog = clamp(1.0 - dO / 22.0, 0.0, 1.0);
+                col *= fog;
+            }
+            col += palette(glow * 0.3 + uTime * 0.05) * glow * (0.5 + uBeat * 1.2);
+            col += uBg * 0.12;
+
+            gl_FragColor = vec4(col, 1.0);
+        }
+    `;
+
+    function compileGLShader(src, type){
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+            console.error(gl.getShaderInfoLog(sh));
+            gl.deleteShader(sh);
+            return null;
+        }
+        return sh;
+    }
+
+    function initGL(){
+        try {
+            gl = glCanvas.getContext('webgl', { antialias: false, alpha: false })
+              || glCanvas.getContext('experimental-webgl', { antialias: false, alpha: false });
+            if (!gl) return false;
+
+            const vs = compileGLShader(GL_VERT_SRC, gl.VERTEX_SHADER);
+            const fs = compileGLShader(GL_FRAG_SRC, gl.FRAGMENT_SHADER);
+            if (!vs || !fs) return false;
+
+            glProg = gl.createProgram();
+            gl.attachShader(glProg, vs);
+            gl.attachShader(glProg, fs);
+            gl.linkProgram(glProg);
+            if (!gl.getProgramParameter(glProg, gl.LINK_STATUS)) {
+                console.error(gl.getProgramInfoLog(glProg));
+                return false;
+            }
+
+            const buf = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+            const loc = gl.getAttribLocation(glProg, 'aPos');
+            gl.enableVertexAttribArray(loc);
+            gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+            ['uRes','uTime','uBass','uMid','uHigh','uBeat','uC1','uC2','uC3','uBg','uScene'].forEach(n => {
+                glU[n] = gl.getUniformLocation(glProg, n);
+            });
+
+            glStartTs = performance.now();
+            return true;
+        } catch (e) {
+            console.error('WebGL init failed', e);
+            return false;
+        }
+    }
+
+    function resizeGL(){
+        if (!gl) return;
+        const scale = Math.min(window.devicePixelRatio || 1, 1.2);
+        glCanvas.width  = Math.max(1, Math.round(window.innerWidth  * scale * 0.72));
+        glCanvas.height = Math.max(1, Math.round(window.innerHeight * scale * 0.72));
+        gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+    }
+
+    function h2v3(hex){
+        const [r, g, b] = h2r(hex);
+        return [r / 255, g / 255, b / 255];
+    }
+
+    function renderGL(sceneIdx, bass, mid, high, beatFlash){
+        if (!glReady) return;
+        gl.useProgram(glProg);
+        gl.uniform2f(glU.uRes, glCanvas.width, glCanvas.height);
+        gl.uniform1f(glU.uTime, (performance.now() - glStartTs) / 1000);
+        gl.uniform1f(glU.uBass, bass);
+        gl.uniform1f(glU.uMid,  mid);
+        gl.uniform1f(glU.uHigh, high);
+        gl.uniform1f(glU.uBeat, beatFlash);
+        gl.uniform3fv(glU.uC1, h2v3(theme.c1));
+        gl.uniform3fv(glU.uC2, h2v3(theme.c2));
+        gl.uniform3fv(glU.uC3, h2v3(theme.c3));
+        gl.uniform3fv(glU.uBg, h2v3(theme.bg));
+        gl.uniform1i(glU.uScene, sceneIdx);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    function bandEnergy(arr, lo, hi){
+        let s = 0;
+        for (let i = lo; i < hi; i++) s += arr[i];
+        return Math.min(1, s / ((hi - lo) * 255));
+    }
+
+    function useGLMode(){
+        return glReady && (mode === 'fractal' || mode === 'tunnel');
+    }
+
+    function updateCanvasVisibility(){
+        const gl_on = useGLMode();
+        glCanvas.style.display = gl_on ? 'block' : 'none';
+        canvas.style.display   = gl_on ? 'none'  : 'block';
+    }
+
     resize();
     window.addEventListener('resize', resize);
+
+    glReady = initGL();
+    if (glReady) resizeGL();
+    updateCanvasVisibility();
 
     // ═══════════════════════════════════════════
     //  Audio — microphone
@@ -1371,7 +1586,6 @@
             fpsTs    = ts;
         }
 
-        const W = canvas.width, H = canvas.height;
         const bufLen = analyser.frequencyBinCount;
         const raw    = new Uint8Array(bufLen);
         analyser.getByteFrequencyData(raw);
@@ -1382,37 +1596,46 @@
         const data = new Uint8Array(bufLen);
         for (let i = 0; i < bufLen; i++) data[i] = Math.min(255, raw[i] * sensitivity);
 
-        // Background — nebula trails; tunnel uses hard clear (rings draw their own depth)
-        if (mode === 'nebula') {
-            ctx.fillStyle   = theme.bg;
-            ctx.globalAlpha = 0.14;
-            ctx.fillRect(0, 0, W, H);
-            ctx.globalAlpha = 1;
+        if (useGLMode()) {
+            const bass = bandEnergy(data, 0, 8);
+            const mid  = bandEnergy(data, 8, 40);
+            const high = bandEnergy(data, 40, 100);
+            renderGL(mode === 'tunnel' ? 1 : 0, bass, mid, high, beat.flash);
         } else {
-            ctx.fillStyle = theme.bg;
-            ctx.fillRect(0, 0, W, H);
-        }
+            const W = canvas.width, H = canvas.height;
 
-        // Beat flash overlay
-        if (beat.flash > 0.01) {
-            const g = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.62);
-            g.addColorStop(0, theme.c1 + '22');
-            g.addColorStop(1, 'transparent');
-            ctx.fillStyle   = g;
-            ctx.globalAlpha = beat.flash * 0.55;
-            ctx.fillRect(0, 0, W, H);
-            ctx.globalAlpha = 1;
-        }
+            // Background — nebula trails; tunnel uses hard clear (rings draw their own depth)
+            if (mode === 'nebula') {
+                ctx.fillStyle   = theme.bg;
+                ctx.globalAlpha = 0.14;
+                ctx.fillRect(0, 0, W, H);
+                ctx.globalAlpha = 1;
+            } else {
+                ctx.fillStyle = theme.bg;
+                ctx.fillRect(0, 0, W, H);
+            }
 
-        // Draw active mode
-        switch (mode) {
-            case 'bars':    drawBars(data, beat);    break;
-            case 'wave':    drawWave(data, beat);    break;
-            case 'radial':  drawRadial(data, beat);  break;
-            case 'nebula':  drawNebula(data, beat);  break;
-            case 'fractal': drawFractal(data, beat); break;
-            case 'tunnel':  drawTunnel(data, beat);  break;
-            case 'sphere':  drawSphere(data, beat);  break;
+            // Beat flash overlay
+            if (beat.flash > 0.01) {
+                const g = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.62);
+                g.addColorStop(0, theme.c1 + '22');
+                g.addColorStop(1, 'transparent');
+                ctx.fillStyle   = g;
+                ctx.globalAlpha = beat.flash * 0.55;
+                ctx.fillRect(0, 0, W, H);
+                ctx.globalAlpha = 1;
+            }
+
+            // Draw active mode
+            switch (mode) {
+                case 'bars':    drawBars(data, beat);    break;
+                case 'wave':    drawWave(data, beat);    break;
+                case 'radial':  drawRadial(data, beat);  break;
+                case 'nebula':  drawNebula(data, beat);  break;
+                case 'fractal': drawFractal(data, beat); break;
+                case 'tunnel':  drawTunnel(data, beat);  break;
+                case 'sphere':  drawSphere(data, beat);  break;
+            }
         }
 
         // HUD update
@@ -1493,10 +1716,11 @@
     function setMode(m) {
         mode = m;
         if (mode === 'nebula')  spawnParticles();
-        if (mode === 'tunnel')  initTunnel();
+        if (mode === 'tunnel' && !glReady) initTunnel();
         document.querySelectorAll('[data-mode]').forEach(b => {
             b.classList.toggle('on', b.dataset.mode === m);
         });
+        updateCanvasVisibility();
     }
 
     document.querySelectorAll('[data-mode]').forEach(b =>
